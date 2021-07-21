@@ -55,6 +55,17 @@
 #    error Unknown LX6 implementation
 #  endif
 
+#elif CONFIG_ARCH_FAMILY_LX7
+#  include <arch/lx7/irq.h>
+
+/* Include implementation-specific IRQ definitions (including IRQ numbers) */
+
+#  ifdef CONFIG_ARCH_CHIP_ESP32S2
+#    include <arch/esp32s2/irq.h>
+#  else
+#    error Unknown LX7 implementation
+#  endif
+
 #else
 #  error Unknown XTENSA architecture
 #endif
@@ -192,7 +203,11 @@ static inline void xtensa_setps(uint32_t ps)
 {
   __asm__ __volatile__
   (
-    "wsr %0, PS"  : : "r"(ps)
+    "wsr %0, PS \n"
+    "rsync \n"
+    :
+    : "r"(ps)
+    : "memory"
   );
 }
 
@@ -202,7 +217,11 @@ static inline void up_irq_restore(uint32_t ps)
 {
   __asm__ __volatile__
   (
-    "wsr %0, PS"  : : "r"(ps)
+    "wsr %0, PS \n"
+    "rsync \n"
+    :
+    : "r"(ps)
+    : "memory"
   );
 }
 

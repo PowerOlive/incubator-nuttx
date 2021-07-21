@@ -143,11 +143,12 @@ void host_abort(int status);
 void *host_alloc_heap(size_t sz);
 void *host_alloc_shmem(const char *name, size_t size, int master);
 void  host_free_shmem(void *mem);
-void *host_malloc(size_t size);
+
+size_t host_malloc_size(void *mem);
+void *host_memalign(size_t alignment, size_t size);
 void host_free(void *mem);
 void *host_realloc(void *oldmem, size_t size);
-void *host_calloc(size_t n, size_t elem_size);
-void *host_memalign(size_t alignment, size_t size);
+void host_mallinfo(int *aordblks, int *uordblks);
 
 /* up_hosttime.c ************************************************************/
 
@@ -164,17 +165,15 @@ void sim_sigdeliver(void);
 
 #ifdef CONFIG_SMP
 void sim_cpu0_start(void);
+int sim_cpu_start(int cpu, void *stack, size_t size);
+void sim_send_ipi(int cpu);
 #endif
 
 /* up_smpsignal.c ***********************************************************/
 
 #ifdef CONFIG_SMP
 void up_cpu_started(void);
-int up_cpu_paused(int cpu);
-struct tcb_s *up_this_task(void);
-int up_cpu_set_pause_handler(int irq);
-void sim_send_ipi(int cpu);
-void sim_timer_handler(void);
+int up_init_ipi(int irq);
 #endif
 
 /* up_oneshot.c *************************************************************/
@@ -312,7 +311,7 @@ void netdriver_loop(void);
 /* up_rptun.c ***************************************************************/
 
 #ifdef CONFIG_RPTUN
-int up_rptun_init(void);
+int up_rptun_init(const char *shmemname, const char *cpuname, bool master);
 void up_rptun_loop(void);
 #endif
 
@@ -329,13 +328,6 @@ struct qspi_dev_s *up_qspiflashinitialize(void);
 #ifdef CONFIG_SIM_HCISOCKET
 int bthcisock_register(int dev_id);
 int bthcisock_loop(void);
-#endif
-
-/* up_btuart.c **************************************************************/
-
-#ifdef CONFIG_SIM_BTUART
-int  sim_btuart_register(const char *name, int id);
-void sim_btuart_loop(void);
 #endif
 
 /* up_audio.c ***************************************************************/

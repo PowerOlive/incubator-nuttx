@@ -28,6 +28,7 @@
 #include <stdio.h>
 #include <string.h>
 #include <assert.h>
+#include <debug.h>
 #include <pthread.h>
 #include <fcntl.h>
 #include <unistd.h>
@@ -37,9 +38,9 @@
 #include <sys/types.h>
 #include <sys/stat.h>
 #include <irq/irq.h>
-#include "nuttx/kmalloc.h"
+#include <nuttx/kmalloc.h>
 #include <nuttx/mqueue.h>
-#include "nuttx/spinlock.h"
+#include <nuttx/spinlock.h>
 #include <nuttx/irq.h>
 #include <nuttx/semaphore.h>
 #include <nuttx/kthread.h>
@@ -2309,16 +2310,9 @@ int32_t esp_event_post(esp_event_base_t event_base,
 
 uint32_t esp_get_free_heap_size(void)
 {
-  int ret;
   struct mallinfo info;
 
-  ret = mm_mallinfo(&g_mmheap, &info);
-  if (ret)
-    {
-      wlerr("Failed to create task\n");
-      return 0;
-    }
-
+  info = kmm_mallinfo();
   return info.fordblks;
 }
 
@@ -2619,12 +2613,12 @@ int32_t esp_read_mac(uint8_t *mac, esp_mac_type_t type)
   regval[1] = getreg32(MAC_ADDR1_REG);
 
   crc = data[6];
-  for (i = 0; i < 6; i++)
+  for (i = 0; i < MAC_LEN; i++)
     {
       mac[i] = data[5 - i];
     }
 
-  if (crc != esp_crc8(mac, 6))
+  if (crc != esp_crc8(mac, MAC_LEN))
     {
       wlerr("Failed to check MAC address CRC\n");
       return -1;
@@ -3673,7 +3667,7 @@ static void *esp_realloc_internal(void *ptr, size_t size)
           return NULL;
         }
 
-      old_size = malloc_usable_size(old_ptr);
+      old_size = malloc_size(old_ptr);
       DEBUGASSERT(old_size > 0);
       memcpy(new_ptr, old_ptr, MIN(old_size, size));
       kmm_free(old_ptr);
@@ -5230,6 +5224,7 @@ int esp_wifi_sta_password(struct iwreq *iwr, bool set)
 
   if (set)
     {
+      memset(wifi_cfg.sta.password, 0x0, PWD_MAX_LEN);
       memcpy(wifi_cfg.sta.password, pdata, len);
 
       wifi_cfg.sta.pmf_cfg.capable = true;
@@ -5354,6 +5349,7 @@ int esp_wifi_sta_essid(struct iwreq *iwr, bool set)
 
   if (set)
     {
+      memset(wifi_cfg.sta.ssid, 0x0, SSID_MAX_LEN);
       memcpy(wifi_cfg.sta.ssid, pdata, len);
 
       ret = esp_wifi_set_config(WIFI_IF_STA, &wifi_cfg);
@@ -5431,7 +5427,7 @@ int esp_wifi_sta_bssid(struct iwreq *iwr, bool set)
   if (set)
     {
       wifi_cfg.sta.bssid_set = true;
-      memcpy(wifi_cfg.sta.bssid, pdata, 6);
+      memcpy(wifi_cfg.sta.bssid, pdata, MAC_LEN);
 
       ret = esp_wifi_set_config(WIFI_IF_STA, &wifi_cfg);
       if (ret)
@@ -5442,7 +5438,7 @@ int esp_wifi_sta_bssid(struct iwreq *iwr, bool set)
     }
   else
     {
-      memcpy(pdata, wifi_cfg.sta.bssid, 6);
+      memcpy(pdata, wifi_cfg.sta.bssid, MAC_LEN);
     }
 
   return OK;
@@ -6301,6 +6297,7 @@ int esp_wifi_softap_password(struct iwreq *iwr, bool set)
 
   if (set)
     {
+      memset(wifi_cfg.ap.password, 0x0, PWD_MAX_LEN);
       memcpy(wifi_cfg.ap.password, pdata, len);
 
       ret = esp_wifi_set_config(WIFI_IF_AP, &wifi_cfg);
@@ -6380,6 +6377,7 @@ int esp_wifi_softap_essid(struct iwreq *iwr, bool set)
 
   if (set)
     {
+      memset(wifi_cfg.ap.ssid, 0x0, SSID_MAX_LEN);
       memcpy(wifi_cfg.ap.ssid, pdata, len);
 
       ret = esp_wifi_set_config(WIFI_IF_AP, &wifi_cfg);

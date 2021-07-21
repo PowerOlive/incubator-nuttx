@@ -1,36 +1,20 @@
 /****************************************************************************
  * net/tcp/tcp_send_buffered.c
  *
- *   Copyright (C) 2007-2014, 2016-2019 Gregory Nutt. All rights reserved.
- *   Author: Gregory Nutt <gnutt@nuttx.org>
- *           Jason Jiang  <jasonj@live.cn>
+ * Licensed to the Apache Software Foundation (ASF) under one or more
+ * contributor license agreements.  See the NOTICE file distributed with
+ * this work for additional information regarding copyright ownership.  The
+ * ASF licenses this file to you under the Apache License, Version 2.0 (the
+ * "License"); you may not use this file except in compliance with the
+ * License.  You may obtain a copy of the License at
  *
- * Redistribution and use in source and binary forms, with or without
- * modification, are permitted provided that the following conditions
- * are met:
+ *   http://www.apache.org/licenses/LICENSE-2.0
  *
- * 1. Redistributions of source code must retain the above copyright
- *    notice, this list of conditions and the following disclaimer.
- * 2. Redistributions in binary form must reproduce the above copyright
- *    notice, this list of conditions and the following disclaimer in
- *    the documentation and/or other materials provided with the
- *    distribution.
- * 3. Neither the name NuttX nor the names of its contributors may be
- *    used to endorse or promote products derived from this software
- *    without specific prior written permission.
- *
- * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS
- * "AS IS" AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT
- * LIMITED TO, THE IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS
- * FOR A PARTICULAR PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL THE
- * COPYRIGHT OWNER OR CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT,
- * INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING,
- * BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS
- * OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED
- * AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT
- * LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN
- * ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
- * POSSIBILITY OF SUCH DAMAGE.
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS, WITHOUT
+ * WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.  See the
+ * License for the specific language governing permissions and limitations
+ * under the License.
  *
  ****************************************************************************/
 
@@ -58,8 +42,8 @@
 #include <stdbool.h>
 #include <stdio.h>
 #include <string.h>
+#include <assert.h>
 #include <errno.h>
-#include <debug.h>
 #include <debug.h>
 
 #include <arch/irq.h>
@@ -109,6 +93,46 @@
 /****************************************************************************
  * Private Functions
  ****************************************************************************/
+
+/****************************************************************************
+ * Name: tcp_inqueue_wrb_size
+ *
+ * Description:
+ *   Get the in-queued write buffer size from connection
+ *
+ * Input Parameters:
+ *   conn - The TCP connection of interest
+ *
+ * Assumptions:
+ *   Called from user logic with the network locked.
+ *
+ ****************************************************************************/
+
+#if CONFIG_NET_SEND_BUFSIZE > 0
+static uint32_t tcp_inqueue_wrb_size(FAR struct tcp_conn_s *conn)
+{
+  FAR struct tcp_wrbuffer_s *wrb;
+  FAR sq_entry_t *entry;
+  uint32_t total = 0;
+
+  if (conn)
+    {
+      for (entry = sq_peek(&conn->unacked_q); entry; entry = sq_next(entry))
+        {
+          wrb = (FAR struct tcp_wrbuffer_s *)entry;
+          total += TCP_WBPKTLEN(wrb);
+        }
+
+      for (entry = sq_peek(&conn->write_q); entry; entry = sq_next(entry))
+        {
+          wrb = (FAR struct tcp_wrbuffer_s *)entry;
+          total += TCP_WBPKTLEN(wrb);
+        }
+    }
+
+  return total;
+}
+#endif /* CONFIG_NET_SEND_BUFSIZE */
 
 /****************************************************************************
  * Name: psock_insert_segment
@@ -235,6 +259,12 @@ static inline void psock_lost_connection(FAR struct socket *psock,
           next = sq_next(entry);
           tcp_wrbuffer_release((FAR struct tcp_wrbuffer_s *)entry);
         }
+
+#if CONFIG_NET_SEND_BUFSIZE > 0
+      /* Notify the send buffer available */
+
+      tcp_sendbuffer_notify(conn);
+#endif /* CONFIG_NET_SEND_BUFSIZE */
 
       /* Reset write buffering variables */
 
@@ -423,7 +453,7 @@ static uint16_t psock_send_eventhandler(FAR struct net_driver_s *dev,
            * the write buffer has been ACKed.
            */
 
-          if (ackno > TCP_WBSEQNO(wrb))
+          if (TCP_SEQ_GT(ackno, TCP_WBSEQNO(wrb)))
             {
               /* Get the sequence number at the end of the data */
 
@@ -435,7 +465,7 @@ static uint16_t psock_send_eventhandler(FAR struct net_driver_s *dev,
 
               /* Has the entire buffer been ACKed? */
 
-              if (ackno >= lastseq)
+              if (TCP_SEQ_GTE(ackno, lastseq))
                 {
                   ninfo("ACK: wrb=%p Freeing write buffer\n", wrb);
 
@@ -465,7 +495,7 @@ static uint16_t psock_send_eventhandler(FAR struct net_driver_s *dev,
                    * buffers in the chain.
                    */
 
-                  trimlen = ackno - TCP_WBSEQNO(wrb);
+                  trimlen = TCP_SEQ_SUB(ackno, TCP_WBSEQNO(wrb));
                   if (trimlen > TCP_WBSENT(wrb))
                     {
                       /* More data has been ACKed then we have sent? */
@@ -520,13 +550,13 @@ static uint16_t psock_send_eventhandler(FAR struct net_driver_s *dev,
        */
 
       wrb = (FAR struct tcp_wrbuffer_s *)sq_peek(&conn->write_q);
-      if (wrb && TCP_WBSENT(wrb) > 0 && ackno > TCP_WBSEQNO(wrb))
+      if (wrb && TCP_WBSENT(wrb) > 0 && TCP_SEQ_GT(ackno, TCP_WBSEQNO(wrb)))
         {
           uint32_t nacked;
 
           /* Number of bytes that were ACKed */
 
-          nacked = ackno - TCP_WBSEQNO(wrb);
+          nacked = TCP_SEQ_SUB(ackno, TCP_WBSEQNO(wrb));
           if (nacked > TCP_WBSENT(wrb))
             {
               /* More data has been ACKed then we have sent? ASSERT? */
@@ -719,6 +749,12 @@ static uint16_t psock_send_eventhandler(FAR struct net_driver_s *dev,
         }
     }
 
+#if CONFIG_NET_SEND_BUFSIZE > 0
+  /* Notify the send buffer available if wrbbuffer drained */
+
+  tcp_sendbuffer_notify(conn);
+#endif /* CONFIG_NET_SEND_BUFSIZE */
+
   /* Check if the outgoing packet is available (it may have been claimed
    * by a sendto event serving a different thread).
    */
@@ -827,8 +863,7 @@ static uint16_t psock_send_eventhandler(FAR struct net_driver_s *dev,
 
       predicted_seqno = tcp_getsequence(conn->sndseq) + sndlen;
 
-      if ((predicted_seqno > conn->sndseq_max) ||
-          (tcp_getsequence(conn->sndseq) > predicted_seqno)) /* overflow */
+      if (TCP_SEQ_GT(predicted_seqno, conn->sndseq_max))
         {
            conn->sndseq_max = predicted_seqno;
         }
@@ -875,53 +910,6 @@ static uint16_t psock_send_eventhandler(FAR struct net_driver_s *dev,
   /* Continue waiting */
 
   return flags;
-}
-
-/****************************************************************************
- * Name: send_txnotify
- *
- * Description:
- *   Notify the appropriate device driver that we are have data ready to
- *   be send (TCP)
- *
- * Input Parameters:
- *   psock - Socket state structure
- *   conn  - The TCP connection structure
- *
- * Returned Value:
- *   None
- *
- ****************************************************************************/
-
-static inline void send_txnotify(FAR struct socket *psock,
-                                 FAR struct tcp_conn_s *conn)
-{
-#ifdef CONFIG_NET_IPv4
-#ifdef CONFIG_NET_IPv6
-  /* If both IPv4 and IPv6 support are enabled, then we will need to select
-   * the device driver using the appropriate IP domain.
-   */
-
-  if (psock->s_domain == PF_INET)
-#endif
-    {
-      /* Notify the device driver that send data is available */
-
-      netdev_ipv4_txnotify(conn->u.ipv4.laddr, conn->u.ipv4.raddr);
-    }
-#endif /* CONFIG_NET_IPv4 */
-
-#ifdef CONFIG_NET_IPv6
-#ifdef CONFIG_NET_IPv4
-  else /* if (psock->s_domain == PF_INET6) */
-#endif /* CONFIG_NET_IPv4 */
-    {
-      /* Notify the device driver that send data is available */
-
-      DEBUGASSERT(psock->s_domain == PF_INET6);
-      netdev_ipv6_txnotify(conn->u.ipv6.laddr, conn->u.ipv6.raddr);
-    }
-#endif /* CONFIG_NET_IPv6 */
 }
 
 /****************************************************************************
@@ -1124,6 +1112,23 @@ ssize_t psock_tcp_send(FAR struct socket *psock, FAR const void *buf,
       psock->s_sndcb->priv  = (FAR void *)psock;
       psock->s_sndcb->event = psock_send_eventhandler;
 
+#if CONFIG_NET_SEND_BUFSIZE > 0
+      /* If the send buffer size exceeds the send limit,
+       * wait for the write buffer to be released
+       */
+
+      while (tcp_inqueue_wrb_size(conn) >= conn->snd_bufs)
+        {
+          if (nonblock)
+            {
+              ret = -EAGAIN;
+              goto errout_with_lock;
+            }
+
+          net_lockedwait_uninterruptible(&conn->snd_sem);
+        }
+#endif /* CONFIG_NET_SEND_BUFSIZE */
+
       /* Allocate a write buffer.  Careful, the network will be momentarily
        * unlocked here.
        */
@@ -1260,7 +1265,7 @@ ssize_t psock_tcp_send(FAR struct socket *psock, FAR const void *buf,
 
       /* Notify the device driver of the availability of TX data */
 
-      send_txnotify(psock, conn);
+      tcp_send_txnotify(psock, conn);
       net_unlock();
 
       if (chunk_result == 0)
@@ -1373,12 +1378,39 @@ int psock_tcp_cansend(FAR struct socket *psock)
    * but we don't know how many more.
    */
 
-  if (tcp_wrbuffer_test() < 0 || iob_navail(false) <= 0)
+  if (tcp_wrbuffer_test() < 0 || iob_navail(true) <= 0)
     {
       return -EWOULDBLOCK;
     }
 
   return OK;
 }
+
+/****************************************************************************
+ * Name: tcp_sendbuffer_notify
+ *
+ * Description:
+ *   Notify the send buffer semaphore
+ *
+ * Input Parameters:
+ *   conn - The TCP connection of interest
+ *
+ * Assumptions:
+ *   Called from user logic with the network locked.
+ *
+ ****************************************************************************/
+
+#if CONFIG_NET_SEND_BUFSIZE > 0
+void tcp_sendbuffer_notify(FAR struct tcp_conn_s *conn)
+{
+  int val = 0;
+
+  nxsem_get_value(&conn->snd_sem, &val);
+  if (val < 0)
+    {
+      nxsem_post(&conn->snd_sem);
+    }
+}
+#endif /* CONFIG_NET_SEND_BUFSIZE */
 
 #endif /* CONFIG_NET && CONFIG_NET_TCP && CONFIG_NET_TCP_WRITE_BUFFERS */

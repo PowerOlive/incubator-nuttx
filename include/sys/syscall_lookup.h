@@ -85,9 +85,7 @@ SYSCALL_LOOKUP(sem_wait,                   1)
 
 #ifndef CONFIG_BUILD_KERNEL
   SYSCALL_LOOKUP(task_create,              5)
-#ifdef CONFIG_LIB_SYSCALL
-  SYSCALL_LOOKUP(nx_task_spawn,            1)
-#endif
+  SYSCALL_LOOKUP(task_spawn,               6)
 #else
   SYSCALL_LOOKUP(pgalloc,                  2)
 #endif
@@ -249,6 +247,7 @@ SYSCALL_LOOKUP(fstat,                      2)
 SYSCALL_LOOKUP(statfs,                     2)
 SYSCALL_LOOKUP(fstatfs,                    2)
 SYSCALL_LOOKUP(telldir,                    1)
+SYSCALL_LOOKUP(sendfile,                   4)
 
 #if defined(CONFIG_FS_RAMMAP)
   SYSCALL_LOOKUP(munmap,                   2)
@@ -261,16 +260,15 @@ SYSCALL_LOOKUP(telldir,                    1)
 
 #if defined(CONFIG_PIPES) && CONFIG_DEV_PIPE_SIZE > 0
   SYSCALL_LOOKUP(nx_pipe,                  3)
+#endif
+
+#if defined(CONFIG_PIPES) && CONFIG_DEV_FIFO_SIZE > 0
   SYSCALL_LOOKUP(nx_mkfifo,                3)
 #endif
 
 #ifdef CONFIG_FILE_STREAM
   SYSCALL_LOOKUP(fs_fdopen,                4)
   SYSCALL_LOOKUP(nxsched_get_streams,      0)
-#endif
-
-#ifdef CONFIG_NET_SENDFILE
-  SYSCALL_LOOKUP(sendfile,                 4)
 #endif
 
 #ifndef CONFIG_DISABLE_MOUNTPOINT
@@ -291,14 +289,6 @@ SYSCALL_LOOKUP(telldir,                    1)
   SYSCALL_LOOKUP(shmat,                    3)
   SYSCALL_LOOKUP(shmctl,                   3)
   SYSCALL_LOOKUP(shmdt,                    1)
-#endif
-
-#if CONFIG_TLS_NELEM > 0
-  SYSCALL_LOOKUP(tls_alloc,                0)
-  SYSCALL_LOOKUP(tls_free,                 1)
-  SYSCALL_LOOKUP(tls_get_set,              1)
-  SYSCALL_LOOKUP(tls_get_dtor,             1)
-  SYSCALL_LOOKUP(tls_set_dtor,             2)
 #endif
 
 /* The following are defined if pthreads are enabled */

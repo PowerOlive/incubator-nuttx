@@ -191,7 +191,7 @@ static inline void up_registerdump(void)
 static void up_dumpstate(void)
 {
   struct tcb_s *rtcb = running_task();
-  uint64_t sp = riscv_getsp();
+  uint64_t sp = up_getsp();
   uintptr_t ustackbase;
   uintptr_t ustacksize;
 #if CONFIG_ARCH_INTERRUPTSTACK > 15
@@ -346,10 +346,6 @@ static int assert_tracecallback(FAR struct usbtrace_s *trace, FAR void *arg)
 
 void up_assert(const char *filename, int lineno)
 {
-#if CONFIG_TASK_NAME_SIZE > 0
-  struct tcb_s *rtcb = running_task();
-#endif
-
   board_autoled_on(LED_ASSERTION);
 
   /* Flush any buffered SYSLOG data (from prior to the assertion) */
@@ -359,18 +355,18 @@ void up_assert(const char *filename, int lineno)
 #ifdef CONFIG_SMP
 #if CONFIG_TASK_NAME_SIZE > 0
   _alert("Assertion failed CPU%d at file:%s line: %d task: %s\n",
-        up_cpu_index(), filename, lineno, rtcb->name);
+         up_cpu_index(), filename, lineno, running_task()->name);
 #else
   _alert("Assertion failed CPU%d at file:%s line: %d\n",
-        up_cpu_index(), filename, lineno);
+         up_cpu_index(), filename, lineno);
 #endif
 #else
 #if CONFIG_TASK_NAME_SIZE > 0
   _alert("Assertion failed at file:%s line: %d task: %s\n",
-        filename, lineno, rtcb->name);
+         filename, lineno, running_task()->name);
 #else
   _alert("Assertion failed at file:%s line: %d\n",
-        filename, lineno);
+         filename, lineno);
 #endif
 #endif
 
@@ -397,7 +393,7 @@ void up_assert(const char *filename, int lineno)
   syslog_flush();
 
 #ifdef CONFIG_BOARD_CRASHDUMP
-  board_crashdump(riscv_getsp(), running_task(), filename, lineno);
+  board_crashdump(up_getsp(), running_task(), filename, lineno);
 #endif
 
   _up_assert();

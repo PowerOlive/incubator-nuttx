@@ -151,10 +151,22 @@ config ESP32C3_CPU_FREQ_MHZ
 config ESP32C3_RT_TIMER
 	bool "Real-time Timer"
 	default n
+	select ESP32C3_TIMER0
 
 config ESP32C3_DISABLE_STDC_ATOMIC
 	bool "Disable standard C atomic"
 	default n
+
+config ESP32C3_RTC_HEAP
+	bool "Use the RTC memory as a separate heap"
+	select ARCH_HAVE_EXTRA_HEAPS
+	default n
+
+config ESP32C3_WIRELESS
+	bool
+	default n
+	select ESP32C3_RT_TIMER
+	select ESP32C3_TIMER0
 
 menu "ESP32-C3 Peripheral Support"
 
@@ -179,6 +191,12 @@ config ESP32C3_TIMER
 config ESP32C3_WDT
 	bool
 	default n
+
+config ESP32C3_EFUSE
+	bool "EFUSE support"
+	default n
+	---help---
+		Enable ESP32-C3 efuse support.
 
 config ESP32C3_SPI
 	bool
@@ -295,7 +313,49 @@ config ESP32C3_WIRELESS
 	---help---
 		Enable Wireless support
 
+config ESP32C3_AES_ACCELERATOR
+	bool "AES Accelerator"
+	default n
+config ESP32C3_SHA_ACCELERATOR
+	bool "SHA Accelerator"
+	default n
+	---help---
+		Enable ESP32-C3 SHA accelerator support.
+
+config ESP32C3_BIGNUM_ACCELERATOR
+	bool "BIGNUM Accelerator"
+	default n
+	---help---
+		Enable ESP32-C3 BIGNUM accelerator support.
+
+config ESP32C3_RSA_ACCELERATOR
+	bool "RSA Accelerator"
+	default n
+	---help---
+		Enable ESP32-C3 RSA accelerator support.
+
+config ESP32C3_WIFI
+	bool "Wi-Fi"
+	default n
+	select NET
+	select ARCH_PHY_INTERRUPT
+	select ESP32C3_WIRELESS
+	---help---
+		Enable Wi-Fi support
+
+config ESP32C3_BLE
+	bool "BLE"
+	default n
+	select ESP32C3_WIRELESS
+	---help---
+		Enable BLE support
+
 endmenu # ESP32-C3 Peripheral Support
+
+menuconfig ESP32C3_WIFI_BT_COEXIST
+	bool "Wi-Fi and BT coexist"
+	default n
+	depends on ESP32C3_WIFI && ESP32C3_BLE
 
 menu "I2C Configuration"
 	depends on ESP32C3_I2C
@@ -334,6 +394,14 @@ config ESP32C3_SPI_UDCS
 
 if ESP32C3_SPI2
 
+config ESP32C3_SPI2_SLAVE
+	bool "SPI2 Slave mode"
+	default n
+	depends on SPI_SLAVE
+	select ESP32C3_GPIO_IRQ
+	---help---
+		Configure SPI2 to operate in Slave mode.
+
 config ESP32C3_SPI2_DMA
 	bool "SPI2 use GDMA"
 	default n
@@ -350,12 +418,19 @@ config ESP32C3_SPI2_DMADESC_NUM
 		be chained for a GDMA transfer.
 
 config ESP32C3_SPI2_DMATHRESHOLD
-	int "SPI2 GDMA threshold"
+	int "SPI2 Master GDMA threshold"
 	default 64
 	depends on ESP32C3_SPI2_DMA
 	---help---
 		When SPI GDMA is enabled, GDMA transfers whose size are below the
 		defined threshold will be performed by polling logic.
+
+config ESP32C3_SPI2_SLAVE_BUFSIZE
+	int "SPI2 Slave buffer size"
+	default 2048
+	depends on ESP32C3_SPI2_SLAVE
+	---help---
+		Configure the size of SPI2 Slave controller's internal buffers.
 
 config ESP32C3_SPI2_CSPIN
 	int "SPI2 CS Pin"
@@ -394,17 +469,41 @@ config ESP32C3_UART0_RXPIN
 	int "UART0 RX Pin"
 	default 20
 
+config ESP32C3_UART0_RTSPIN
+	int "UART0 RTS Pin"
+	depends on SERIAL_IFLOWCONTROL
+	default 16
+	range 0 21
+
+config ESP32C3_UART0_CTSPIN
+	int "UART0 CTS Pin"
+	depends on SERIAL_OFLOWCONTROL
+	default 15
+	range 0 21
+
 endif # ESP32C3_UART0
 
 if ESP32C3_UART1
 
 config ESP32C3_UART1_TXPIN
 	int "UART1 TX Pin"
-	default 6
+	default 8
 
 config ESP32C3_UART1_RXPIN
 	int "UART1 RX Pin"
-	default 7
+	default 9
+
+config ESP32C3_UART1_RTSPIN
+	int "UART1 RTS Pin"
+	depends on SERIAL_IFLOWCONTROL
+	default 1
+	range 0 21
+
+config ESP32C3_UART1_CTSPIN
+	int "UART1 CTS Pin"
+	depends on SERIAL_OFLOWCONTROL
+	default 2
+	range 0 21
 
 endif # ESP32C3_UART1
 
@@ -569,7 +668,7 @@ endif # ESP32C3_ADC1
 endmenu # ADC Configuration
 
 menu "Wi-Fi configuration"
-	depends on ESP32C3_WIRELESS
+	depends on ESP32C3_WIFI
 
 choice
 	prompt "ESP32-C3 Wi-Fi mode"
@@ -685,7 +784,35 @@ choice EXAMPLE_POWER_SAVE_MODE
 		bool "maximum modem"
 endchoice
 
-endmenu # ESP32C3_WIRELESS
+config ESP32C3_WIFI_RECONNECT
+	bool "Enable Wi-Fi to reconnect"
+	default n
+	---help---
+		Select this option to enable Wi-Fi to reconnect for station when disconnected.
+
+endmenu # Wi-Fi configuration
+
+menu "BLE Configuration"
+	depends on ESP32C3_BLE
+
+config ESP32C3_BLE_PKTBUF_NUM
+	int "BLE netcard packet buffer number per netcard"
+	default 16
+
+config ESP32C3_BLE_TTY_NAME
+	string "BLE TTY device name"
+	default "/dev/ttyHCI0"
+	depends on UART_BTH4
+
+config ESP32C3_BLE_TASK_STACK_SIZE
+	int "Controller task stack size"
+	default 4096
+
+config ESP32C3_BLE_TASK_PRIORITY
+	int "Controller task priority"
+	default 110
+
+endmenu # BLE Configuration
 
 menu "SPI Flash configuration"
 	depends on ESP32C3_SPIFLASH
@@ -759,5 +886,40 @@ config ESP32C3_TICKLESS
 	default n
 	select ARCH_HAVE_TICKLESS
 	select SCHED_TICKLESS
+
+menu "AES accelerator"
+	depends on ESP32C3_AES_ACCELERATOR
+
+config ESP32C3_AES_ACCELERATOR_TEST
+	bool "AES driver test"
+	default n
+
+endmenu # AES accelerator
+menu "SHA accelerator"
+	depends on ESP32C3_SHA_ACCELERATOR
+
+config ESP32C3_SHA_ACCELERATOR_TEST
+	bool "SHA accelerator test"
+	default n
+
+endmenu # ESP32C3_SHA_ACCELERATOR
+
+menu "RSA Accelerate Configuration"
+	depends on ESP32C3_RSA_ACCELERATOR
+
+config ESP32C3_RSA_ACCELERATOR_TEST
+	bool "RSA driver test"
+	default n
+
+menu "BIGNUM"
+	depends on ESP32C3_BIGNUM_ACCELERATOR
+
+config ESP32C3_BIGNUM_ACCELERATOR_TEST
+	bool "BIGNUM driver test"
+	default n
+
+endmenu # ESP32C3_BIGNUM_ACCELERATOR
+
+endmenu # ESP32C3_RSA_ACCELERATOR
 
 endif # ARCH_CHIP_ESP32C3

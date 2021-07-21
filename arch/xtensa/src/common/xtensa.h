@@ -311,8 +311,8 @@ void xtensa_add_region(void);
 /* Serial output */
 
 void up_lowputc(char ch);
-void xtensa_early_serial_initialize(void);
-void xtensa_serial_initialize(void);
+void xtensa_earlyserialinit(void);
+void xtensa_serialinit(void);
 
 void rpmsg_serialinit(void);
 
@@ -346,10 +346,6 @@ void xtensa_pminitialize(void);
 
 #ifdef CONFIG_STACK_COLORATION
 void up_stack_color(FAR void *stackbase, size_t nbytes);
-#endif
-
-#ifdef CONFIG_XTENSA_DUMPBT_ON_ASSERT
-void xtensa_backtrace_start(uint32_t *pc, uint32_t *sp, uint32_t *next_pc);
 #endif
 
 #endif /* __ASSEMBLY__ */

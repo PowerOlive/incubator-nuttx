@@ -98,19 +98,10 @@ ifeq ($(CONFIG_SMP),y)
   CSRCS += up_smpsignal.c up_cpuidlestack.c
   REQUIREDOBJS += up_smpsignal$(OBJEXT)
   HOSTCFLAGS += -DCONFIG_SMP=1 -DCONFIG_SMP_NCPUS=$(CONFIG_SMP_NCPUS)
-ifeq ($(CONFIG_SIM_WALLTIME),y)
-  HOSTCFLAGS += -DCONFIG_SIM_WALLTIME=1
-endif
 ifeq ($(CONFIG_SCHED_INSTRUMENTATION),y)
   HOSTCFLAGS += -DCONFIG_SCHED_INSTRUMENTATION=1
 endif
   HOSTSRCS += up_simsmp.c
-endif
-
-ifeq ($(CONFIG_SCHED_INSTRUMENTATION),y)
-ifneq ($(CONFIG_SCHED_INSTRUMENTATION_BUFFER),y)
-  CSRCS += up_schednote.c
-endif
 endif
 
 ifeq ($(CONFIG_ONESHOT),y)
@@ -204,11 +195,6 @@ ifeq ($(CONFIG_SIM_HCISOCKET),y)
   CSRCS += up_hcisocket.c
 endif
 
-ifeq ($(CONFIG_SIM_BTUART),y)
-  HOSTSRCS += up_hcisocket_host.c
-  CSRCS += up_btuart.c
-endif
-
 ifeq ($(CONFIG_I2C_RESET),y)
   HOSTCFLAGS += -DCONFIG_I2C_RESET=1
 endif
@@ -251,8 +237,8 @@ OBJS = $(AOBJS) $(COBJS) $(HOSTOBJS)
 
 ifneq ($(CONFIG_HOST_MACOS),y)
   ARCHSCRIPT += -T nuttx.ld
-  LDSTARTGROUP ?= --start-group
-  LDENDGROUP ?= --end-group
+  LDSTARTGROUP ?= -Wl,--start-group
+  LDENDGROUP ?= -Wl,--end-group
 endif
 
 # Determine which NuttX libraries will need to be linked in
@@ -353,8 +339,6 @@ depend: .depend
 
 context::
 
-clean_context::
-
 clean:
 	$(Q) if [ -e board/Makefile ]; then \
 		$(MAKE) -C board clean ; \
@@ -365,7 +349,7 @@ clean:
 	$(call DELFILE, libarch$(LIBEXT))
 	$(call CLEAN)
 
-distclean: clean
+distclean:: clean
 	$(Q) if [ -e board/Makefile ]; then \
 		$(MAKE) -C board distclean ; \
 	fi

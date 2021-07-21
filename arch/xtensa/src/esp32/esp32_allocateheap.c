@@ -25,6 +25,7 @@
 #include <nuttx/config.h>
 
 #include <sys/types.h>
+#include <assert.h>
 #include <debug.h>
 
 #include <nuttx/arch.h>
@@ -32,6 +33,11 @@
 #include <nuttx/board.h>
 #include <arch/board/board.h>
 #include <arch/esp32/memory_layout.h>
+
+#ifdef CONFIG_ESP32_SPIRAM_BANKSWITCH_ENABLE
+#include <nuttx/himem/himem.h>
+#include "esp32_himem.h"
+#endif
 
 #include "xtensa.h"
 
@@ -142,6 +148,9 @@ void xtensa_add_region(void)
       start = (FAR void *)CONFIG_HEAP2_BASE;
       size = CONFIG_HEAP2_SIZE;
 #    endif
+#  ifdef CONFIG_ESP32_SPIRAM_BANKSWITCH_ENABLE
+    size -= esp_himem_reserved_area_size();
+#  endif
     umm_addregion(start, size);
 #  endif
 #endif

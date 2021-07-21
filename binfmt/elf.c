@@ -68,7 +68,10 @@
  * Private Function Prototypes
  ****************************************************************************/
 
-static int elf_loadbinary(FAR struct binary_s *binp);
+static int elf_loadbinary(FAR struct binary_s *binp,
+                          FAR const char *filename,
+                          FAR const struct symtab_s *exports,
+                          int nexports);
 #if defined(CONFIG_DEBUG_FEATURES) && defined(CONFIG_DEBUG_BINFMT)
 static void elf_dumploadinfo(FAR struct elf_loadinfo_s *loadinfo);
 #endif
@@ -111,7 +114,6 @@ static void elf_dumploadinfo(FAR struct elf_loadinfo_s *loadinfo)
   binfo("  dtors:        %08lx\n", (long)loadinfo->dtors);
   binfo("  ndtors:       %d\n",    loadinfo->ndtors);
 #endif
-  binfo("  filfd:        %d\n",    loadinfo->filfd);
   binfo("  symtabidx:    %d\n",    loadinfo->symtabidx);
   binfo("  strtabidx:    %d\n",    loadinfo->strtabidx);
 
@@ -206,16 +208,19 @@ static void elf_dumpentrypt(FAR struct binary_s *binp,
  *
  ****************************************************************************/
 
-static int elf_loadbinary(FAR struct binary_s *binp)
+static int elf_loadbinary(FAR struct binary_s *binp,
+                          FAR const char *filename,
+                          FAR const struct symtab_s *exports,
+                          int nexports)
 {
   struct elf_loadinfo_s loadinfo;  /* Contains globals for libelf */
   int                   ret;
 
-  binfo("Loading file: %s\n", binp->filename);
+  binfo("Loading file: %s\n", filename);
 
   /* Initialize the ELF library to load the program binary. */
 
-  ret = elf_init(binp->filename, &loadinfo);
+  ret = elf_init(filename, &loadinfo);
   elf_dumploadinfo(&loadinfo);
   if (ret != 0)
     {
@@ -235,7 +240,7 @@ static int elf_loadbinary(FAR struct binary_s *binp)
 
   /* Bind the program to the exported symbol table */
 
-  ret = elf_bind(&loadinfo, binp->exports, binp->nexports);
+  ret = elf_bind(&loadinfo, exports, nexports);
   if (ret != 0)
     {
       berr("Failed to bind symbols program binary: %d\n", ret);
